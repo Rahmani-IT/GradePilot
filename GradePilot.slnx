@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="GradePilot.Application/GradePilot.Application.csproj" />
+  <Project Path="GradePilot.Domain/GradePilot.Domain.csproj" />
+  <Project Path="GradePilot.Infrastructure/GradePilot.Infrastructure.csproj" />
+  <Project Path="GradePilot.Tests/GradePilot.Tests.csproj" />
+  <Project Path="GradePilot.Web/GradePilot.Web.csproj" />
+</Solution>

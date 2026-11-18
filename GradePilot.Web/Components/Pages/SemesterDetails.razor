@@ -1,0 +1,243 @@
+@page "/semesters/{SemesterId:guid}"
+
+@using GradePilot.Application.Services
+@using GradePilot.Domain.Entities
+@using GradePilot.Domain.Grading
+@using GradePilot.Web.Helpers
+
+@inject SemesterService SemesterService
+@inject CourseService CourseService
+
+<PageTitle>Semester Details - GradePilot</PageTitle>
+
+@if (semester is null)
+{
+    <p>Loading semester...</p>
+}
+else
+{
+    <h1>@semester.Name</h1>
+
+    <p>
+        Academic Year: @semester.AcademicYear |
+        Semester: @semester.SemesterNumber
+    </p>
+
+    <div class="card p-4 mb-4">
+        <h5 class="mb-1">Semester GPA</h5>
+        <p class="display-6 mb-1">@GpaFormatter.Format(semester.Courses)</p>
+        <small class="text-muted">Weighted by credits. Only completed courses are included.</small>
+    </div>
+
+    <div class="card p-4 mb-4">
+        <h4>Add New Course</h4>
+
+        <div class="mb-3">
+            <label class="form-label">Course Name</label>
+            <input class="form-control"
+                   @bind="courseName"
+                   placeholder="e.g. Programming" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Credits</label>
+            <input type="number"
+                   min="0.1"
+                   step="0.1"
+                   class="form-control"
+                   @bind="credits" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Midterm (30%)</label>
+            <input type="number"
+                   min="0"
+                   max="100"
+                   step="0.01"
+                   class="form-control"
+                   @bind="midterm" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Endterm (30%)</label>
+            <input type="number"
+                   min="0"
+                   max="100"
+                   step="0.01"
+                   class="form-control"
+                   @bind="endterm" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Final Exam (40%)</label>
+            <input type="number"
+                   min="0"
+                   max="100"
+                   step="0.01"
+                   class="form-control"
+                   @bind="finalExam" />
+        </div>
+
+        <p class="text-muted">
+            Leave scores empty if they are not available yet.
+        </p>
+
+        <button class="btn btn-primary"
+                @onclick="AddCourseAsync">
+            Add Course
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="alert alert-info">@message</div>
+    }
+
+    <h4>Courses</h4>
+
+    @if (semester.Courses.Count == 0)
+    {
+        <p>No courses added yet.</p>
+    }
+    else
+    {
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Course</th>
+                    <th>Credits</th>
+                    <th>Percentage</th>
+                    <th>Letter Grade</th>
+                    <th>Grade Point</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                @foreach (var course in semester.Courses)
+                {
+                    GradeScaleEntry? grade = course.Percentage.HasValue
+                        ? AituGradingScale.GetGrade(course.Percentage.Value)
+                        : null;
+
+                    <tr>
+                        <td>@course.CourseName</td>
+
+                        <td>@course.Credits</td>
+
+                        <td>
+                            @(course.Percentage.HasValue
+                                ? $"{course.Percentage.Value:F0}%"
+                                : "Pending")
+                        </td>
+
+                        @if (grade is not null)
+                        {
+                            <td>@grade.LetterGrade</td>
+                            <td>@grade.GradePoint.ToString("F2")</td>
+                        }
+                        else
+                        {
+                            <td>Pending</td>
+                            <td>Pending</td>
+                        }
+
+                        <td>
+                            <button class="btn btn-danger btn-sm"
+                                    @onclick="() => RemoveCourseAsync(course.CourseName)">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid SemesterId { get; set; }
+
+    private Semester? semester;
+
+    private string courseName = "";
+    private decimal credits = 5;
+
+    private decimal? midterm;
+    private decimal? endterm;
+    private decimal? finalExam;
+
+    private string message = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadSemesterAsync();
+    }
+
+    private async Task LoadSemesterAsync()
+    {
+        semester = await SemesterService.GetSemesterByIdAsync(SemesterId);
+    }
+
+    private async Task AddCourseAsync()
+    {
+        try
+        {
+            await CourseService.AddCourseAsync(
+                SemesterId,
+                courseName,
+                credits,
+                midterm,
+                endterm,
+                finalExam);
+
+            courseName = "";
+            midterm = null;
+            endterm = null;
+            finalExam = null;
+
+            await LoadSemesterAsync();
+
+            message = "Course added successfully!";
+        }
+        catch (Exception ex)
+        {
+            var currentException = ex;
+            bool databaseError = false;
+
+            while (currentException != null)
+            {
+                if (currentException is System.Data.Common.DbException ||
+                    currentException is System.Net.Sockets.SocketException ||
+                    currentException is TimeoutException)
+                {
+                    databaseError = true;
+                    break;
+                }
+
+                currentException = currentException.InnerException;
+            }
+
+            message = databaseError
+                ? "Database connection failed. Please check your connection and try again."
+                : ex.Message;
+        }
+    }
+
+    private async Task RemoveCourseAsync(string name)
+    {
+        try
+        {
+            await CourseService.RemoveCourseAsync(SemesterId, name);
+
+            await LoadSemesterAsync();
+
+            message = "Course deleted successfully!";
+        }
+        catch (Exception ex)
+        {
+            message = ex.Message;
+        }
+    }
+}

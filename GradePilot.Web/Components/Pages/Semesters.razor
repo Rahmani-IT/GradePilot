@@ -1,0 +1,207 @@
+@page "/semesters"
+
+@using GradePilot.Application.Services
+@using GradePilot.Domain.Entities
+@using GradePilot.Web.Helpers
+
+@inject SemesterService SemesterService
+
+<PageTitle>Semesters - GradePilot</PageTitle>
+
+<h1>My Semesters</h1>
+
+<p>Manage your academic semesters and track your progress.</p>
+
+<div class="card p-4 mb-4">
+    <h5 class="mb-1">Cumulative GPA (CGPA)</h5>
+    <p class="display-6 mb-1">
+        @(semesters is null ? "—" : GpaFormatter.Format(semesters.SelectMany(s => s.Courses)))
+    </p>
+    <small class="text-muted">Across all semesters. Only completed courses are included.</small>
+</div>
+
+<div class="card p-4 mb-4">
+    <h4>Create New Semester</h4>
+
+    <div class="mb-3">
+        <label class="form-label">Semester Name</label>
+        <input class="form-control"
+               @bind="semesterName"
+               placeholder="e.g. Fall 2026" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Academic Year</label>
+        <input type="number"
+               class="form-control"
+               @bind="academicYear" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Semester Number</label>
+        <select class="form-select" @bind="semesterNumber">
+            <option value="1">Semester 1</option>
+            <option value="2">Semester 2</option>
+            <option value="3">Semester 3</option>
+        </select>
+    </div>
+
+    <button class="btn btn-primary"
+            @onclick="CreateSemesterAsync">
+        Create Semester
+    </button>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert @(hasError ? "alert-danger" : "alert-info")">@message</div>
+}
+
+<h4>My Semester List</h4>
+
+@if (semesters is null)
+{
+    <p>Loading semesters...</p>
+}
+else if (hasError)
+{
+    <p>Unable to load semesters. Please try again.</p>
+}
+else if (semesters.Count == 0)
+{
+    <p>No semesters found. Create your first semester.</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Academic Year</th>
+                <th>Semester</th>
+                <th>GPA</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var semester in semesters)
+            {
+                <tr>
+                    <td>@semester.Name</td>
+                    <td>@semester.AcademicYear</td>
+                    <td>@semester.SemesterNumber</td>
+                    <td>@GpaFormatter.Format(semester.Courses)</td>
+                    <td>
+                        <a class="btn btn-primary btn-sm me-2"
+                           href="/semesters/@semester.Id">
+                            View Courses
+                        </a>
+
+                        <button class="btn btn-danger btn-sm"
+                                @onclick="() => DeleteSemesterAsync(semester.Id)">
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private string semesterName = "";
+    private int academicYear = 2026;
+    private int semesterNumber = 1;
+
+    private List<Semester>? semesters;
+    private string message = "";
+    private bool hasError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSemestersAsync();
+    }
+
+    private async Task LoadSemestersAsync()
+    {
+        hasError = false;
+        message = "";
+
+        try
+        {
+            var result = await SemesterService.GetAllSemestersAsync();
+            semesters = result.ToList();
+        }
+        catch (Exception ex)
+        {
+            var currentException = ex;
+            bool databaseError = false;
+
+            while (currentException != null)
+            {
+                if (currentException is System.Data.Common.DbException ||
+                    currentException is System.Net.Sockets.SocketException ||
+                    currentException is TimeoutException)
+                {
+                    databaseError = true;
+                    break;
+                }
+
+                currentException = currentException.InnerException;
+            }
+
+            hasError = true;
+            message = databaseError
+                ? "Database connection failed. Please check your connection and try again."
+                : ex.Message;
+
+            semesters = new List<Semester>();
+        }
+        finally
+        {
+            semesters ??= new List<Semester>();
+        }
+    }
+
+    private async Task CreateSemesterAsync()
+    {
+        try
+        {
+            await SemesterService.CreateSemesterAsync(
+                semesterName,
+                academicYear,
+                semesterNumber
+            );
+
+            semesterName = "";
+
+            await LoadSemestersAsync();
+
+            if (!hasError)
+                message = "Semester created successfully!";
+        }
+        catch (Exception ex)
+        {
+            hasError = true;
+            message = ex.Message;
+        }
+    }
+
+    private async Task DeleteSemesterAsync(Guid id)
+    {
+        try
+        {
+            await SemesterService.DeleteSemesterAsync(id);
+
+            await LoadSemestersAsync();
+
+            if (!hasError)
+                message = "Semester deleted successfully!";
+        }
+        catch (Exception ex)
+        {
+            hasError = true;
+            message = ex.Message;
+        }
+    }
+}

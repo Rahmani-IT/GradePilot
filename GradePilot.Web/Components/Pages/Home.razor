@@ -1,0 +1,12 @@
+@page "/"
+
+@inject NavigationManager Navigation
+
+<PageTitle>GradePilot</PageTitle>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Navigation.NavigateTo("/semesters", replace: true);
+    }
+}
