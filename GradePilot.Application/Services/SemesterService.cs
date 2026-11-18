@@ -1,4 +1,5 @@
 using GradePilot.Application.Interfaces;
+using GradePilot.Domain.Common;
 using GradePilot.Domain.Entities;
 
 namespace GradePilot.Application.Services;
@@ -12,19 +13,21 @@ public class SemesterService
         _repository = repository;
     }
 
-    public async Task CreateSemesterAsync(
+    public async Task<Result<Unit>> CreateSemesterAsync(
         string name,
         int academicYear,
         int semesterNumber,
         CancellationToken cancellationToken = default)
     {
-        var semester = new Semester(
-            name,
-            academicYear,
-            semesterNumber
-        );
+        var creation = Semester.Create(name, academicYear, semesterNumber);
 
-        await _repository.AddAsync(semester, cancellationToken);
+        return await creation.Match<Task<Result<Unit>>>(
+            async semester =>
+            {
+                await _repository.AddAsync(semester, cancellationToken);
+                return Result.Ok();
+            },
+            error => Task.FromResult(Result.Fail<Unit>(error)));
     }
 
     public async Task<IReadOnlyList<Semester>> GetAllSemestersAsync(
@@ -46,4 +49,4 @@ public class SemesterService
     {
         await _repository.DeleteAsync(id, cancellationToken);
     }
-} 
+}

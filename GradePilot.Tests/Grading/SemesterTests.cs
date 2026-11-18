@@ -1,3 +1,4 @@
+using GradePilot.Domain.Common;
 using GradePilot.Domain.Entities;
 using GradePilot.Domain.Services;
 
@@ -12,8 +13,9 @@ public class SemesterTests
 
         var course = new GradedCourse("Mathematics", 5, 96, 96, 96);
 
-        semester.AddCourse(course);
+        var result = semester.AddCourse(course);
 
+        Assert.True(result.IsSuccess);
         Assert.Single(semester.Courses);
     }
 
@@ -25,9 +27,11 @@ public class SemesterTests
         semester.AddCourse(
             new GradedCourse("Mathematics", 5, 96, 96, 96));
 
-        Assert.Throws<InvalidOperationException>(() =>
-            semester.AddCourse(
-                new GradedCourse("mathematics", 5, 90, 90, 90)));
+        var result = semester.AddCourse(
+            new GradedCourse("mathematics", 5, 90, 90, 90));
+
+        Assert.IsType<Result<Unit>.Failure>(result);
+        Assert.Single(semester.Courses);
     }
 
     [Fact]
@@ -43,7 +47,7 @@ public class SemesterTests
 
         var result = GpaCalculator.CalculateSemesterGpa(semester);
 
-        Assert.Equal(3.70m, result);
+        Assert.Equal(3.70m, Assert.IsType<Result<decimal>.Success>(result).Value);
     }
 
     [Fact]
@@ -59,10 +63,10 @@ public class SemesterTests
         semester2.AddCourse(
             new GradedCourse("Programming", 5, 85, 85, 85));
 
-        var cgpa = GpaCalculator.CalculateCgpa(
+        var result = GpaCalculator.CalculateCgpa(
             new[] { semester1, semester2 });
 
-        Assert.Equal(3.67m, cgpa);
+        Assert.Equal(3.67m, Assert.IsType<Result<decimal>.Success>(result).Value);
     }
 
     [Fact]
@@ -75,7 +79,25 @@ public class SemesterTests
 
         var result = semester.RemoveCourse("Mathematics");
 
-        Assert.True(result);
+        Assert.True(result.IsSuccess);
         Assert.Empty(semester.Courses);
+    }
+
+    [Fact]
+    public void RemoveCourse_ReturnsFailure_WhenCourseDoesNotExist()
+    {
+        var semester = new Semester("Fall 2026", 2026, 1);
+
+        var result = semester.RemoveCourse("Physics");
+
+        Assert.IsType<Result<Unit>.Failure>(result);
+    }
+
+    [Fact]
+    public void Create_RejectsEmptyName()
+    {
+        var result = Semester.Create("   ", 2026, 1);
+
+        Assert.IsType<Result<Semester>.Failure>(result);
     }
 }

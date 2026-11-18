@@ -1,3 +1,5 @@
+using GradePilot.Domain.Common;
+
 namespace GradePilot.Domain.Grading;
 
 public static class AituGradingScale
@@ -22,19 +24,22 @@ public static class AituGradingScale
             new GradeScaleEntry("F",  0.00m, 0,  29,  "Fail")
         });
 
-   public static GradeScaleEntry GetGrade(decimal percentage)
-{
-    if (percentage < 0 || percentage > 100)
-        throw new ArgumentOutOfRangeException(
-            nameof(percentage),
-            "Percentage must be between 0 and 100.");
+    public static Result<GradeScaleEntry> GetGrade(decimal percentage)
+    {
+        if (percentage < 0 || percentage > 100)
+            return Result.Fail<GradeScaleEntry>(
+                "Percentage must be between 0 and 100.");
 
-    var roundedPercentage = (int)Math.Round(
-        percentage,
-        MidpointRounding.AwayFromZero);
+        var roundedPercentage = (int)Math.Round(
+            percentage,
+            MidpointRounding.AwayFromZero);
 
-    return Grades.Single(g =>
-        roundedPercentage >= g.MinimumPercentage &&
-        roundedPercentage <= g.MaximumPercentage);
-}
+        var grade = Grades.FirstOrDefault(g =>
+            roundedPercentage >= g.MinimumPercentage &&
+            roundedPercentage <= g.MaximumPercentage);
+
+        return grade is null
+            ? Result.Fail<GradeScaleEntry>("No AITU grade matches this percentage.")
+            : Result.Ok(grade);
+    }
 }

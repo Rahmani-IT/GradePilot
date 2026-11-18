@@ -1,4 +1,5 @@
 using GradePilot.Application.Interfaces;
+using GradePilot.Domain.Common;
 using GradePilot.Domain.Entities;
 
 namespace GradePilot.Application.Services;
@@ -12,7 +13,7 @@ public class CourseService
         _repository = repository;
     }
 
-    public async Task AddCourseAsync(
+    public async Task<Result<Unit>> AddCourseAsync(
         Guid semesterId,
         string courseName,
         decimal credits,
@@ -21,24 +22,22 @@ public class CourseService
         decimal? finalExam,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(courseName))
-            throw new ArgumentException("Course name is required.");
+        var validation = ValidateCourseInput(
+            courseName,
+            credits,
+            midterm,
+            endterm,
+            finalExam);
 
-        if (credits <= 0)
-            throw new ArgumentOutOfRangeException(
-                nameof(credits),
-                "Credits must be greater than zero.");
-
-        ValidateScore(midterm, nameof(midterm));
-        ValidateScore(endterm, nameof(endterm));
-        ValidateScore(finalExam, nameof(finalExam));
+        if (validation.IsFailure)
+            return validation;
 
         var semester = await _repository.GetByIdAsync(
             semesterId,
             cancellationToken);
 
         if (semester is null)
-            throw new InvalidOperationException("Semester not found.");
+            return Result.Fail<Unit>("Semester not found.");
 
         var course = new GradedCourse(
             courseName,
@@ -47,26 +46,17 @@ public class CourseService
             endterm,
             finalExam);
 
-        semester.AddCourse(course);
+        var addResult = semester.AddCourse(course);
 
-        await _repository.UpdateAsync(
-            semester,
-            cancellationToken);
+        if (addResult.IsFailure)
+            return addResult;
+
+        await _repository.UpdateAsync(semester, cancellationToken);
+
+        return addResult;
     }
 
-    private static void ValidateScore(
-        decimal? score,
-        string parameterName)
-    {
-        if (score.HasValue && (score.Value < 0 || score.Value > 100))
-        {
-            throw new ArgumentOutOfRangeException(
-                parameterName,
-                "Score must be between 0 and 100.");
-        }
-    }
-
-    public async Task RemoveCourseAsync(
+    public async Task<Result<Unit>> RemoveCourseAsync(
         Guid semesterId,
         string courseName,
         CancellationToken cancellationToken = default)
@@ -76,13 +66,42 @@ public class CourseService
             cancellationToken);
 
         if (semester is null)
-            throw new InvalidOperationException("Semester not found.");
+            return Result.Fail<Unit>("Semester not found.");
 
-        if (!semester.RemoveCourse(courseName))
-            throw new InvalidOperationException("Course not found.");
+        var removeResult = semester.RemoveCourse(courseName);
 
-        await _repository.UpdateAsync(
-            semester,
-            cancellationToken);
+        if (removeResult.IsFailure)
+            return removeResult;
+
+        await _repository.UpdateAsync(semester, cancellationToken);
+
+        return removeResult;
     }
+
+    private static Result<Unit> ValidateCourseInput(
+        string courseName,
+        decimal credits,
+        decimal? midterm,
+        decimal? endterm,
+        decimal? finalExam) =>
+        ValidateCourseName(courseName)
+            .Bind(_ => ValidateCredits(credits))
+            .Bind(_ => ValidateScore(midterm, "Midterm"))
+            .Bind(_ => ValidateScore(endterm, "Endterm"))
+            .Bind(_ => ValidateScore(finalExam, "Final exam"));
+
+    private static Result<Unit> ValidateCourseName(string courseName) =>
+        string.IsNullOrWhiteSpace(courseName)
+            ? Result.Fail<Unit>("Course name is required.")
+            : Result.Ok();
+
+    private static Result<Unit> ValidateCredits(decimal credits) =>
+        credits <= 0
+            ? Result.Fail<Unit>("Credits must be greater than zero.")
+            : Result.Ok();
+
+    private static Result<Unit> ValidateScore(decimal? score, string label) =>
+        score is { } value && (value < 0 || value > 100)
+            ? Result.Fail<Unit>($"{label} score must be between 0 and 100.")
+            : Result.Ok();
 }

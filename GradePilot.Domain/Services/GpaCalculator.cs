@@ -1,3 +1,4 @@
+using GradePilot.Domain.Common;
 using GradePilot.Domain.Entities;
 using GradePilot.Domain.Grading;
 
@@ -5,51 +6,40 @@ namespace GradePilot.Domain.Services;
 
 public static class GpaCalculator
 {
-    public static decimal Calculate(IEnumerable<GradedCourse> courses)
+    private readonly record struct WeightedPoints(decimal GradePoints, decimal Credits);
+
+    public static Result<decimal> Calculate(IEnumerable<GradedCourse> courses)
     {
         ArgumentNullException.ThrowIfNull(courses);
 
-        var courseList = courses.ToList();
-
-        var completedCourses = courseList
+        var completedCourses = courses
             .Where(course => course.IsCompleted)
             .ToList();
 
         if (completedCourses.Count == 0)
-            return 0m;
+            return Result.Ok(0m);
 
-        decimal totalGradePoints = 0;
-        decimal totalCredits = 0;
-
-        foreach (var course in completedCourses)
-        {
-            if (string.IsNullOrWhiteSpace(course.CourseName))
-                throw new ArgumentException("Course name is required.");
-
-            if (course.Credits <= 0)
-                throw new ArgumentException(
-                    "Credits must be greater than zero.");
-
-            var grade = AituGradingScale.GetGrade(
-                course.Percentage!.Value);
-
-            totalGradePoints += grade.GradePoint * course.Credits;
-            totalCredits += course.Credits;
-        }
-
-        return Math.Round(
-            totalGradePoints / totalCredits,
-            2,
-            MidpointRounding.AwayFromZero);
+        return completedCourses
+            .Select(ToWeightedPoints)
+            .Aggregate(
+                Result.Ok(new WeightedPoints(0m, 0m)),
+                (accumulated, next) => accumulated.Bind(total =>
+                    next.Map(points => new WeightedPoints(
+                        total.GradePoints + points.GradePoints,
+                        total.Credits + points.Credits))))
+            .Map(total => Math.Round(
+                total.GradePoints / total.Credits,
+                2,
+                MidpointRounding.AwayFromZero));
     }
 
-    public static decimal CalculateSemesterGpa(Semester semester)
+    public static Result<decimal> CalculateSemesterGpa(Semester semester)
     {
         ArgumentNullException.ThrowIfNull(semester);
         return Calculate(semester.Courses);
     }
 
-    public static decimal CalculateCgpa(IEnumerable<Semester> semesters)
+    public static Result<decimal> CalculateCgpa(IEnumerable<Semester> semesters)
     {
         ArgumentNullException.ThrowIfNull(semesters);
 
@@ -58,5 +48,22 @@ public static class GpaCalculator
             .ToList();
 
         return Calculate(allCourses);
+    }
+
+    private static Result<WeightedPoints> ToWeightedPoints(GradedCourse course)
+    {
+        if (string.IsNullOrWhiteSpace(course.CourseName))
+            return Result.Fail<WeightedPoints>("Course name is required.");
+
+        if (course.Credits <= 0)
+            return Result.Fail<WeightedPoints>("Credits must be greater than zero.");
+
+        if (course.Percentage is not decimal percentage)
+            return Result.Fail<WeightedPoints>("A completed course must have a percentage.");
+
+        return AituGradingScale.GetGrade(percentage)
+            .Map(grade => new WeightedPoints(
+                grade.GradePoint * course.Credits,
+                course.Credits));
     }
 }

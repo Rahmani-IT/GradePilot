@@ -167,18 +167,25 @@ else
     {
         try
         {
-            await SemesterService.CreateSemesterAsync(
+            var result = await SemesterService.CreateSemesterAsync(
                 semesterName,
                 academicYear,
-                semesterNumber
-            );
+                semesterNumber);
 
-            semesterName = "";
+            if (result.IsSuccess)
+                semesterName = "";
 
             await LoadSemestersAsync();
 
-            if (!hasError)
+            if (result.IsFailure)
+            {
+                hasError = true;
+                message = result.Match(_ => "", error => error);
+            }
+            else if (!hasError)
+            {
                 message = "Semester created successfully!";
+            }
         }
         catch (Exception ex)
         {

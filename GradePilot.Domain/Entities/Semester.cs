@@ -1,4 +1,4 @@
-using GradePilot.Domain.Entities;
+using GradePilot.Domain.Common;
 
 namespace GradePilot.Domain.Entities;
 
@@ -17,26 +17,36 @@ public sealed class Semester
     public IReadOnlyCollection<GradedCourse> Courses =>
         _courses.AsReadOnly();
 
+    // Used by EF Core when materializing from the database.
+    // Application code should create semesters through Semester.Create.
     public Semester(
         string name,
         int academicYear,
         int semesterNumber)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Semester name is required.");
-
-        if (academicYear < 2000)
-            throw new ArgumentOutOfRangeException(nameof(academicYear));
-
-        if (semesterNumber < 1 || semesterNumber > 3)
-            throw new ArgumentOutOfRangeException(nameof(semesterNumber));
-
         Name = name;
         AcademicYear = academicYear;
         SemesterNumber = semesterNumber;
     }
 
-    public void AddCourse(GradedCourse course)
+    public static Result<Semester> Create(
+        string name,
+        int academicYear,
+        int semesterNumber)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Result.Fail<Semester>("Semester name is required.");
+
+        if (academicYear < 2000)
+            return Result.Fail<Semester>("Academic year must be 2000 or later.");
+
+        if (semesterNumber is < 1 or > 3)
+            return Result.Fail<Semester>("Semester number must be between 1 and 3.");
+
+        return Result.Ok(new Semester(name, academicYear, semesterNumber));
+    }
+
+    public Result<Unit> AddCourse(GradedCourse course)
     {
         ArgumentNullException.ThrowIfNull(course);
 
@@ -46,14 +56,14 @@ public sealed class Semester
                 course.CourseName,
                 StringComparison.OrdinalIgnoreCase)))
         {
-            throw new InvalidOperationException(
-                "This course already exists in this semester.");
+            return Result.Fail<Unit>("This course already exists in this semester.");
         }
 
         _courses.Add(course);
+        return Result.Ok(Unit.Value);
     }
 
-    public bool RemoveCourse(string courseName)
+    public Result<Unit> RemoveCourse(string courseName)
     {
         var course = _courses.FirstOrDefault(c =>
             string.Equals(
@@ -61,6 +71,10 @@ public sealed class Semester
                 courseName,
                 StringComparison.OrdinalIgnoreCase));
 
-        return course is not null && _courses.Remove(course);
+        if (course is null)
+            return Result.Fail<Unit>("Course not found in this semester.");
+
+        _courses.Remove(course);
+        return Result.Ok(Unit.Value);
     }
 }

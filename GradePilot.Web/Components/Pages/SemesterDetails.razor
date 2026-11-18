@@ -90,7 +90,7 @@ else
 
     @if (!string.IsNullOrWhiteSpace(message))
     {
-        <div class="alert alert-info">@message</div>
+        <div class="alert @(hasError ? "alert-danger" : "alert-info")">@message</div>
     }
 
     <h4>Courses</h4>
@@ -118,6 +118,7 @@ else
                 {
                     GradeScaleEntry? grade = course.Percentage.HasValue
                         ? AituGradingScale.GetGrade(course.Percentage.Value)
+                            .Match<GradeScaleEntry?>(g => g, _ => null)
                         : null;
 
                     <tr>
@@ -169,6 +170,7 @@ else
     private decimal? finalExam;
 
     private string message = "";
+    private bool hasError;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -184,7 +186,7 @@ else
     {
         try
         {
-            await CourseService.AddCourseAsync(
+            var result = await CourseService.AddCourseAsync(
                 SemesterId,
                 courseName,
                 credits,
@@ -192,14 +194,20 @@ else
                 endterm,
                 finalExam);
 
-            courseName = "";
-            midterm = null;
-            endterm = null;
-            finalExam = null;
+            if (result.IsSuccess)
+            {
+                courseName = "";
+                midterm = null;
+                endterm = null;
+                finalExam = null;
+            }
 
             await LoadSemesterAsync();
 
-            message = "Course added successfully!";
+            hasError = result.IsFailure;
+            message = result.Match(
+                _ => "Course added successfully!",
+                error => error);
         }
         catch (Exception ex)
         {
@@ -219,6 +227,7 @@ else
                 currentException = currentException.InnerException;
             }
 
+            hasError = true;
             message = databaseError
                 ? "Database connection failed. Please check your connection and try again."
                 : ex.Message;
@@ -229,14 +238,18 @@ else
     {
         try
         {
-            await CourseService.RemoveCourseAsync(SemesterId, name);
+            var result = await CourseService.RemoveCourseAsync(SemesterId, name);
 
             await LoadSemesterAsync();
 
-            message = "Course deleted successfully!";
+            hasError = result.IsFailure;
+            message = result.Match(
+                _ => "Course deleted successfully!",
+                error => error);
         }
         catch (Exception ex)
         {
+            hasError = true;
             message = ex.Message;
         }
     }

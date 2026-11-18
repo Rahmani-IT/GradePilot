@@ -1,3 +1,4 @@
+using GradePilot.Domain.Common;
 using GradePilot.Domain.Entities;
 using GradePilot.Domain.Grading;
 using GradePilot.Domain.Services;
@@ -37,7 +38,8 @@ public class GpaCalculatorTests
     {
         var result = AituGradingScale.GetGrade(percentage);
 
-        Assert.Equal(expectedGrade, result.LetterGrade);
+        var success = Assert.IsType<Result<GradeScaleEntry>.Success>(result);
+        Assert.Equal(expectedGrade, success.Value.LetterGrade);
     }
 
     [Fact]
@@ -52,7 +54,7 @@ public class GpaCalculatorTests
 
         var result = GpaCalculator.Calculate(courses);
 
-        Assert.Equal(3.53m, result);
+        Assert.Equal(3.53m, Assert.IsType<Result<decimal>.Success>(result).Value);
     }
 
     [Fact]
@@ -63,14 +65,16 @@ public class GpaCalculatorTests
             new("Mathematics", 0, 96, 96, 96)
         };
 
-        Assert.Throws<ArgumentException>(
-            () => GpaCalculator.Calculate(courses));
+        var result = GpaCalculator.Calculate(courses);
+
+        Assert.IsType<Result<decimal>.Failure>(result);
     }
 
     [Fact]
     public void GetGrade_RejectsInvalidPercentage()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => AituGradingScale.GetGrade(105));
+        var result = AituGradingScale.GetGrade(105);
+
+        Assert.IsType<Result<GradeScaleEntry>.Failure>(result);
     }
 }
