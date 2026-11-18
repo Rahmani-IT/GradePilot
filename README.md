@@ -157,7 +157,7 @@ To execute the automated tests, run:
 dotnet test
 
 
-The project currently has 33 passing tests.
+The project currently has 35 passing tests.
 
  How to Use
 
